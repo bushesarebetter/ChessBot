@@ -1,11 +1,10 @@
 import chess
-
 center_weights = [
 -0.37, -0.25, -0.12, 0.00, 0.00, -0.12, -0.25, -0.37,
 -0.25, -0.12, 0.00, 0.25, 0.25, 0.00, -0.12, -0.25,
 -0.12, 0.00, 0.25, 0.37, 0.37, 0.25, 0.00, -0.12,
-0.00, 0.25, 0.37, 0.50, 0.50, 0.37, 0.25, 0.00,
-0.00, 0.25, 0.37, 0.50, 0.50, 0.37, 0.25, 0.00,
+0.00, 0.25, 0.37, 0.75, 0.75, 0.37, 0.25, 0.00,
+0.00, 0.25, 0.37, 0.75, 0.75, 0.37, 0.25, 0.00,
 -0.12, 0.00, 0.25, 0.37, 0.37, 0.25, 0.00, -0.12,
 -0.25, -0.12, 0.00, 0.25, 0.25, 0.00, -0.12, -0.25,
 -0.37, -0.25, -0.12, 0.00, 0.00, -0.12, -0.25, -0.37,
@@ -20,19 +19,28 @@ pieces = {
 }
 
 def check_isolated_pawn(board: chess.Board, square: int, color: chess.WHITE | chess.BLACK):
-    file = square % 8
+    file = chess.square_file(square)
+    pawn_files = {chess.square_file(p) for p in board.pieces(chess.PAWN, color)}
+    return not ((file - 1 in pawn_files) or (file + 1 in pawn_files))
 
-    has_left_pawn = (file - 1) >= 0 and any(p % 8 == (file - 1) for p in board.pieces(chess.PAWN, color))
-    has_right_pawn = (file + 1) <= 7 and any(p % 8 == (file + 1) for p in board.pieces(chess.PAWN, color))
-
-    return not has_left_pawn or has_right_pawn
-def rook_open_file(board: chess.Board, color):
+def rook_open_file(board, color):
     bonus = 0
     for rook_sq in board.pieces(chess.ROOK, color):
-        file = chess.square_file(rook_sq)
-        if not any(board.pieces(chess.PAWN, chess.WHITE, chess.File(file))) and \
-           not any(board.pieces(chess.PAWN, chess.BLACK, chess.File(file))):
-            bonus += 0.4
+        file_idx = chess.square_file(rook_sq)
+        no_white_pawns = not any(
+            p for p in board.pieces(chess.PAWN, chess.WHITE) 
+            if chess.square_file(p) == file_idx
+        )
+        no_black_pawns = not any(
+            p for p in board.pieces(chess.PAWN, chess.BLACK) 
+            if chess.square_file(p) == file_idx
+        )
+        
+        if no_white_pawns and no_black_pawns:
+            bonus += 0.4 
+        elif (color == chess.WHITE and no_white_pawns) or (color == chess.BLACK and no_black_pawns):
+            bonus += 0.2
+            
     return bonus
 def bishop_pair_bonus(board: chess.Board, color):
     bishops = board.pieces(chess.BISHOP, color)
@@ -63,18 +71,21 @@ def pawn_structure_check(board: chess.Board, color: chess.WHITE | chess.BLACK):
     
     return penalty
 
-def hanging_pieces_check(board: chess.Board, color):
+def hanging_pieces_check(board, color):
     penalty = 0
-    for square in board.occupied_co[color]:
+    for square in chess.SQUARES:
         piece = board.piece_at(square)
-
+        if piece is None or piece.color != color:
+            continue
+            
         attackers = board.attackers(not color, square)
         defenders = board.attackers(color, square)
-
+        
         if len(attackers) > len(defenders):
-            piece_value = pieces[piece.piece_type] if piece.piece_type != chess.KING else 0
-            penalty += piece_value
-
+            piece_value = pieces.get(piece.piece_type, 0)
+            if piece.piece_type != chess.KING:
+                penalty += piece_value
+                
     return penalty
 def king_safety_check(board: chess.Board, color):
     king_square = board.king(color)
@@ -86,7 +97,7 @@ def king_safety_check(board: chess.Board, color):
 
     for file_offset in [-1, 0, 1]:
         file = king_file + file_offset
-        if 0 <= king_file < 8:
+        if 0 <= file < 8:
             for rank_offset in [1, 2]:
                 shield_square = chess.square(file, king_rank + rank_offset * (1 if color == chess.WHITE else -1))
                 if board.piece_at(shield_square) == chess.Piece(chess.PAWN, color):
@@ -94,32 +105,40 @@ def king_safety_check(board: chess.Board, color):
     penalty += (3-pawn_shield) * 0.4
 
     open_file_penalty = 0
+    white_pawn_files = {chess.square_file(p) for p in board.pieces(chess.PAWN, chess.WHITE)}
+    black_pawn_files = {chess.square_file(p) for p in board.pieces(chess.PAWN, chess.BLACK)}
     for file_offset in [-1, 0, 1]:
         file = king_file + file_offset
         if 0 <= file < 8:
-            if not any(board.pieces(chess.PAWN, color, chess.File(file))):
-                if any(board.pieces(pt, not color, chess.File(file)) for pt in [chess.ROOK, chess.QUEEN]):
-                    open_file_penalty += 0.8
+            # Check if file is open (no pawns of either color)
+            if file not in white_pawn_files and file not in black_pawn_files:
+                # Check if opponent has major pieces on this file
+                for square in chess.SQUARES:
+                    if chess.square_file(square) == file:
+                        piece = board.piece_at(square)
+                        if piece and piece.color != color and piece.piece_type in [chess.ROOK, chess.QUEEN]:
+                            open_file_penalty += 0.8
+                            break
     penalty += open_file_penalty
 
+    game_phase = detect_game_phase(board)
     center_dist = max(3.5 - abs(king_file - 3.5), 3.5 - abs(king_rank - 3.5))
-    penalty += center_dist * (0.8 if 6 < detect_game_phase(board) < 16 else 0.3) 
- 
+    
+    penalty += center_dist * (0.8 if 6 < game_phase < 16 else 0.1) 
+    
+    return penalty * (1 if 6 < game_phase < 16 else 0.5)
 
 def detect_game_phase(board: chess.Board):
     phase = 0
-    piece_values = {chess.QUEEN: 4, chess.ROOK: 2, chess.BISHOP: 1, chess.KNIGHT: 1}
-
-    for piece, value in piece_values:
-        phase += len(board.pieces(piece, chess.WHITE)) * value
-        phase += len(board.pieces(piece, chess.BLACK)) * value
-    
+    phase = sum(len(board.pieces(p, chess.WHITE)) + len(board.pieces(p, chess.BLACK)) * v 
+                for p, v in {chess.QUEEN: 4, chess.ROOK: 2, chess.BISHOP: 1, chess.KNIGHT: 1}.items())
     return min(phase, 24)
+
                  
 def evaluate_board(board: chess.Board):
 
     if board.is_checkmate():
-        return 9999 if board.turn else -999
+        return -9999 if board.turn else 9999
     if board.is_stalemate() or board.is_insufficient_material():
         return 0
     
@@ -128,12 +147,12 @@ def evaluate_board(board: chess.Board):
     for piece in pieces:
         white = board.pieces(piece, chess.WHITE)
         black = board.pieces(piece, chess.BLACK)
-        evaluation += white * pieces[piece] 
-        evaluation -= black * pieces[piece]
+        evaluation += len(white) * pieces[piece] 
+        evaluation -= len(black) * pieces[piece]
         evaluation += sum(center_weights[p] for p in white)
-        evalaution -= sum(center_weights[p] for p in black)
+        evaluation -= sum(center_weights[p] for p in black)
 
-    evaluation += calculate_mobility(board, chess.WHITE) - calculate_mobility(board, chess.BLACK)
+    #evaluation += calculate_mobility(board, chess.WHITE) - calculate_mobility(board, chess.BLACK)
     evaluation += bishop_pair_bonus(board, chess.WHITE) - bishop_pair_bonus(board, chess.BLACK)
     evaluation += rook_open_file(board, chess.WHITE) - rook_open_file(board, chess.BLACK)
 
