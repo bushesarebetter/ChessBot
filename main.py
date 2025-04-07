@@ -15,21 +15,28 @@ model = ChessBot().to(device)
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 dataset = ChessDataset('output.csv')
 
+checkpoint = torch.load('chessbot_epoch_20.pth')
+model.load_state_dict(checkpoint['model_state_dict'])
+optimizer.load_state_dict(checkpoint['optim_state_dict'])
+
+
+for param_group in optimizer.param_groups:
+    param_group['lr'] = 0.01
 batch_size = 64
 total_size = len(dataset)
-val_size = 562703
+val_size = 262703
 train_size = total_size - val_size
 
 train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
 
 train_loader = DataLoader(train_dataset, batch_size, True)
 test_loader = DataLoader(val_dataset, batch_size, True)
-epochs = 50
+epochs = 100
 
 policy_loss_fn = nn.CrossEntropyLoss()
 value_loss_fn = nn.MSELoss()
 
-for epoch in range(epochs):
+for epoch in range(31, epochs):
     model.train()
     total_loss = 0.0
     l = 0
