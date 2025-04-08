@@ -1,5 +1,4 @@
 
-import pandas as pd
 from processing_tools import FEN_to_TENSOR, convert_pgn_to_fen, move_to_tensor, parse_winner, mask_policy_outputs
 from torch.utils.data import DataLoader, random_split
 from dataloader import ChessDataset
