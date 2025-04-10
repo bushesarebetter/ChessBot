@@ -14,28 +14,28 @@ model = ChessBot().to(device)
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 dataset = ChessDataset('output.csv')
 
-checkpoint = torch.load('chessbot_epoch_20.pth')
+checkpoint = torch.load('chess_model_epoch_300.pth')
 model.load_state_dict(checkpoint['model_state_dict'])
-optimizer.load_state_dict(checkpoint['optim_state_dict'])
+optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 
 
 for param_group in optimizer.param_groups:
-    param_group['lr'] = 0.01
+    param_group['lr'] = 0.005
 batch_size = 64
 total_size = len(dataset)
-val_size = 262703
+val_size = 10000
 train_size = total_size - val_size
 
 train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
 
 train_loader = DataLoader(train_dataset, batch_size, True)
 test_loader = DataLoader(val_dataset, batch_size, True)
-epochs = 100
+epochs = 1000
 
 policy_loss_fn = nn.CrossEntropyLoss()
 value_loss_fn = nn.MSELoss()
 
-for epoch in range(31, epochs):
+for epoch in range(301, epochs):
     model.train()
     total_loss = 0.0
     l = 0
@@ -57,7 +57,7 @@ for epoch in range(31, epochs):
 
         loss_val = value_loss_fn(pred_value.squeeze(), value_target)
 
-        loss = loss_start + loss_end + 0.2 * loss_val
+        loss = loss_start + loss_end + loss_val
 
         optimizer.zero_grad()
         loss.backward()
@@ -72,7 +72,7 @@ for epoch in range(31, epochs):
                 'model_state_dict': model.state_dict(), 
                 'optim_state_dict': optimizer.state_dict(),
             }, f'chessbot_epoch_{epoch}.pth')
-        print(f'Saved model at chessbot_epoch_{epoch}.pth')
+        print(f'Saved model at chess_model_epoch_{epoch}.pth')
     print(f"EPOCH: {epoch+1}/{epochs}, Loss: {total_loss/len(train_loader):.4f}")
 
 

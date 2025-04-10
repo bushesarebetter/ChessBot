@@ -13,12 +13,13 @@ import torch.nn.functional as F
 
 
 
-REPLAY_BUFFER_SIZE = 100000
+REPLAY_BUFFER_SIZE = 10000
 SELF_PLAY_GAMES = 10
-SIMS = 20
+SIMS = 50
 LR = 5e-4
 EPOCHS = 1000
 BATCH_SIZE = 64
+START_EPOCH = 200
 
 def self_play_game(model, n_simulations=50):
     board = chess.Board()
@@ -65,7 +66,7 @@ def train_on_selfplay(model: ChessBot, optimizer: optim.Adam, batch):
     loss_end = F.cross_entropy(pred_end, end_targets)
     loss_value = F.mse_loss(pred_value.squeeze(), value_targets)
 
-    loss = loss_start + loss_end + 0.2 * loss_value
+    loss = loss_start + loss_end + loss_value
     
     optimizer.zero_grad()
     loss.backward()
@@ -74,7 +75,7 @@ def train_on_selfplay(model: ChessBot, optimizer: optim.Adam, batch):
     return loss.item()
 
 def train_loop(model, optimizer, replay_buffer, n_epochs=1000, batch_size=64):    
-    for epoch in range(n_epochs):
+    for epoch in range(START_EPOCH, n_epochs):
         print(f"Epoch {epoch + 1}/{n_epochs}")
         
         for _ in range(SELF_PLAY_GAMES):
@@ -91,7 +92,7 @@ def train_loop(model, optimizer, replay_buffer, n_epochs=1000, batch_size=64):
             print(f"Epoch {epoch + 1}, Loss: {loss:.4f}")
         
         if (epoch + 1) % 100 == 0:
-            torch.save(model.state_dict(), f"chess_model_epoch_{epoch + 1}.pth")
+            torch.save({'model_state_dict': model.state_dict(), 'optimizer_state_dict': optimizer.state_dict()}, f"chess_model_epoch_{epoch + 1}.pth")
 
         if (epoch + 1) % 100 == 0:
             print(f"Replay buffer size: {len(replay_buffer)}")
@@ -100,7 +101,7 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 model = ChessBot().to(device)
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 
-checkpoint = torch.load('chessbot_epoch_85.pth', map_location='cpu')
+checkpoint = torch.load('chess_model_epoch_200.pth', map_location='cpu')
 model.load_state_dict(checkpoint['model_state_dict'])
 optimizer.load_state_dict(checkpoint['optim_state_dict'])
 
@@ -116,5 +117,3 @@ train_loop(model, optimizer, replay_buffer, n_epochs=EPOCHS, batch_size=BATCH_SI
 
 
 
-
-replay_buffer = deque(maxlen=REPLAY_BUFFER_SIZE)
