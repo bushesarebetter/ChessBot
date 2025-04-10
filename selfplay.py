@@ -87,8 +87,8 @@ def train_loop(model, optimizer, replay_buffer, n_epochs=1000, batch_size=64):
             
             loss = train_on_selfplay(model, optimizer, batch)
             
-            if (epoch + 1) % 100 == 0:
-                print(f"Epoch {epoch + 1}, Loss: {loss:.4f}")
+
+            print(f"Epoch {epoch + 1}, Loss: {loss:.4f}")
         
         if (epoch + 1) % 100 == 0:
             torch.save(model.state_dict(), f"chess_model_epoch_{epoch + 1}.pth")
